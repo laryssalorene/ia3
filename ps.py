@@ -6,6 +6,67 @@ import cv2
 activation_func = lambda x: np.maximum(0, x)  # ReLU
 activation_derivative = lambda a: np.where(a > 0, 1, 0)
 
+class LerImagem:
+    
+    @staticmethod
+    def obter_dados(img_size=50):
+        raiz = "RecFac"
+        # Usando os.listdir e list comprehension para pegar todas as pastas
+        pastas_pessoas = [os.path.join(raiz, pasta) for pasta in os.listdir(raiz) if os.path.isdir(os.path.join(raiz, pasta))]
+
+        C = 20  # Total de classes (assumindo que há 20 pastas, uma por pessoa)
+        X = []  # Lista para armazenar as imagens vetorizadas
+        Y = []  # Lista para armazenar os rótulos (one-hot encoding)
+
+        # Iterar pelas pastas (pessoas)
+        for i, pasta in enumerate(pastas_pessoas):
+            imagens_pasta = os.listdir(pasta)  # Lista de imagens dentro da pasta da pessoa
+
+            for imagem_nome in imagens_pasta:
+                path_imagem = os.path.join(pasta, imagem_nome)
+
+                # Carrega a imagem em escala de cinza
+                imagem = cv2.imread(path_imagem, cv2.IMREAD_GRAYSCALE)
+                # Redimensiona a imagem
+                imagem_redimensionada = cv2.resize(imagem, (img_size, img_size))
+
+                # Vetorização da imagem (transforma em vetor 1D)
+                imagem_vetorizada = imagem_redimensionada.flatten()
+
+                # Armazenando a imagem vetorizada na lista X
+                X.append(imagem_vetorizada)
+
+                # Criando o vetor de rótulos one-hot encoding
+                rotulo = np.zeros(C)  # Inicializa todos os valores com 0
+                rotulo[i] = 1  # Marca a classe correta como 1
+                Y.append(rotulo)
+
+        # Convertendo as listas para arrays numpy
+        X = np.array(X)  # Forma (n_amostras, n_features)
+        Y = np.array(Y)  # Forma (n_amostras, n_classes)
+        print(f"Tamanho final de X: {X.shape}, Tamanho final de Y: {Y.shape}")
+        print(f"Exemplo de Y[0]: {Y[0]}")
+        print(f"Soma de Y[0]: {np.sum(Y[0])}")  # Deve ser 1
+
+
+        return X, Y
+class Normalizacao:
+    
+    @staticmethod
+    def normalizar(data):
+        # 1. Calcular o valor mínimo e máximo para cada característica
+        min_val = np.min(data, axis=0)
+        max_val = np.max(data, axis=0)
+        
+        # 2. Normalização para o intervalo [0, 1]
+        range_val = max_val - min_val  # Calculando a diferença entre max e min
+        normalized_data = (data - min_val) / range_val  # Normalizando para o intervalo [0, 1]
+        
+        # 3. Ajustando para o intervalo [-1, 1]
+        normalized_data = normalized_data * 2 - 1  # Ajusta para o intervalo [-1, 1]
+        
+        return normalized_data
+
 def softmax(z):
     exp_z = np.exp(z - np.max(z, axis=0, keepdims=True))
     return exp_z / np.sum(exp_z, axis=0, keepdims=True)
@@ -15,10 +76,9 @@ def step_activation(u):
 
 # Classe Perceptron Simples
 class PerceptronSimples:
-    def __init__(self, learning_rate=0.01, max_epochs=10, tolerance=1e-4, n_classes=20):
+    def __init__(self, learning_rate=0.01, max_epochs=10, n_classes=20):
         self.learning_rate = learning_rate
         self.max_epochs = max_epochs
-        self.tolerance = tolerance
         self.n_classes = n_classes
         self.weights = None
 
@@ -41,7 +101,7 @@ class PerceptronSimples:
 
 # Classe Adaline
 class Adaline:
-    def __init__(self, learning_rate=0.01, max_epochs=1000, epsilon=1e-3):
+    def __init__(self, learning_rate=0.001, max_epochs=1000, epsilon=1e-3):
         self.learning_rate = learning_rate
         self.max_epochs = max_epochs
         self.epsilon = epsilon
@@ -51,25 +111,38 @@ class Adaline:
     def fit(self, X, y):
         N, M = X.shape
         self.num_classes = y.shape[1]
-        self.weights = np.random.randn(M, self.num_classes) * np.sqrt(2 / M)
+        self.weights = np.random.randn(M, self.num_classes) * 0.01  # Reduzi a escala dos pesos
         self.bias = np.zeros(self.num_classes)
+
         for epoch in range(self.max_epochs):
             u = np.dot(X, self.weights) + self.bias
-            y_hat = np.where(u >= 0, 1, 0)
+            u = np.clip(u, -1e3, 1e3)  # Evita overflow
+            y_hat = u  # Ativação linear
             error = y - y_hat
-            for i in range(self.num_classes):
-                self.weights[:, i] += self.learning_rate * np.dot(X.T, error[:, i]) / N
-                self.bias[i] += self.learning_rate * np.sum(error[:, i]) / N
+            
+            # Calcular o EQM
+            eqm = np.mean(error**2)
+            
+            # Atualizar pesos e bias
+            self.weights += self.learning_rate * np.dot(X.T, error) / N
+            self.bias += self.learning_rate * np.mean(error, axis=0)
+            
+            
+            # Critério de parada
             if np.linalg.norm(error) < self.epsilon:
+                print(f"Convergência alcançada na época {epoch}")
                 break
 
     def predict(self, X):
         u = np.dot(X, self.weights) + self.bias
-        return np.where(u >= 0, 1, 0)
+        u = np.clip(u, -1e3, 1e3)  # Evita overflow
+        return np.where(u >= 0.5, 1, 0)
+
 
 # Classe MLP
 class MLP:
     def __init__(self, input_size, hidden_layers, output_size, learning_rate=0.01, max_epochs=1000):
+        
         self.learning_rate = learning_rate
         self.max_epochs = max_epochs
         self.layers = [input_size] + hidden_layers + [output_size]
@@ -105,7 +178,7 @@ class MLP:
         y_pred = activations[-1].T
         return np.argmax(y_pred, axis=1)
 
-# Funções de Métrica
+# Métricas
 def calculate_metrics(y_test, predictions):
     accuracy = np.mean(np.argmax(y_test, axis=1) == np.argmax(predictions, axis=1))
     sensitivity = np.mean(np.diag(np.dot(y_test.T, predictions)) / np.sum(y_test, axis=0))
@@ -114,17 +187,17 @@ def calculate_metrics(y_test, predictions):
 
 # Execução
 if __name__ == "__main__":
-    # Dados simulados para demonstração
-    n_samples = 640
-    n_features = 2500
-    n_classes = 20
-    X = np.random.rand(n_samples, n_features)
-    y = np.eye(n_classes)[np.random.choice(n_classes, n_samples)]
+    img_size = 50
+    data, labels = LerImagem.obter_dados(img_size)
+    data = Normalizacao.normalizar(data)
+
+    n_samples, n_features = data.shape
+    n_classes = labels.shape[1]
 
     modelos = {
         "Perceptron Simples": PerceptronSimples(learning_rate=0.01, max_epochs=10, n_classes=n_classes),
         "Adaline": Adaline(learning_rate=0.01, max_epochs=1000),
-        "MLP": MLP(input_size=n_features, hidden_layers=[128], output_size=n_classes, learning_rate=0.01, max_epochs=1000)
+        "MLP": MLP(input_size=n_features, hidden_layers=[128], output_size=n_classes, learning_rate=0.01, max_epochs=10)
     }
 
     for nome_modelo, modelo in modelos.items():
@@ -133,8 +206,8 @@ if __name__ == "__main__":
 
         for _ in range(10):
             indices = np.random.permutation(n_samples)
-            X_train, X_test = X[indices[:512]], X[indices[512:]]
-            y_train, y_test = y[indices[:512]], y[indices[512:]]
+            X_train, X_test = data[indices[:512]], data[indices[512:]]
+            y_train, y_test = labels[indices[:512]], labels[indices[512:]]
 
             modelo.fit(X_train, y_train)
             predictions = modelo.predict(X_test)
@@ -148,13 +221,8 @@ if __name__ == "__main__":
             metrics["specificity"].append(specificity)
 
         for metric_name, values in metrics.items():
-            mean_value = np.mean(values)
-            std_value = np.std(values)
-            max_value = np.max(values)
-            min_value = np.min(values)
-
             print(f"\nEstatísticas para {metric_name} - {nome_modelo}:")
-            print(f"Média: {mean_value:.4f}")
-            print(f"Desvio-Padrão: {std_value:.4f}")
-            print(f"Maior Valor: {max_value:.4f}")
-            print(f"Menor Valor: {min_value:.4f}")
+            print(f"Média: {np.mean(values):.4f}")
+            print(f"Desvio-Padrão: {np.std(values):.4f}")
+            print(f"Maior Valor: {np.max(values):.4f}")
+            print(f"Menor Valor: {np.min(values):.4f}")
