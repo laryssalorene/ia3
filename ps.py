@@ -83,21 +83,29 @@ class PerceptronSimples:
         self.weights = None
 
     def fit(self, X, y):
-        X_bias = np.hstack([np.ones((X.shape[0], 1)), X])
-        self.weights = np.random.randn(X_bias.shape[1], self.n_classes) * 0.01
+        X_bias = np.hstack([np.ones((X.shape[0], 1)), X])  # Adiciona bias
+        self.weights = np.random.randn(X_bias.shape[1], self.n_classes) * 0.01  # Inicializa pesos pequenos
+
         for epoch in range(self.max_epochs):
+            total_error = 0
             for i in range(X.shape[0]):
                 xi = X_bias[i]
                 yi = y[i]
-                u = np.dot(xi, self.weights)
-                y_pred = step_activation(u)
+                u = np.dot(xi, self.weights)  # Calcula ativação
+                y_pred = step_activation(u)  # Função degrau
                 error = yi - y_pred
-                self.weights += self.learning_rate * np.outer(xi, error)
+                total_error += np.sum(np.abs(error))  # Soma o erro absoluto
+                self.weights += self.learning_rate * np.outer(xi, error)  # Ajuste dos pesos
+
+            print(f"Época {epoch}: Erro Total = {total_error}")
+            if total_error == 0:  # Parar caso não haja mais erros
+                print(f"Convergência alcançada na época {epoch}")
+                break
 
     def predict(self, X):
-        X_bias = np.hstack([np.ones((X.shape[0], 1)), X])
-        u = np.dot(X_bias, self.weights)
-        return step_activation(u)
+        X_bias = np.hstack([np.ones((X.shape[0], 1)), X])  # Adiciona bias
+        u = np.dot(X_bias, self.weights)  # Calcula ativação
+        return step_activation(u)  # Retorna predições como classes discretas
 
 # Classe Adaline
 class Adaline:
@@ -180,10 +188,31 @@ class MLP:
 
 # Métricas
 def calculate_metrics(y_test, predictions):
-    accuracy = np.mean(np.argmax(y_test, axis=1) == np.argmax(predictions, axis=1))
-    sensitivity = np.mean(np.diag(np.dot(y_test.T, predictions)) / np.sum(y_test, axis=0))
-    specificity = np.mean(np.diag(np.dot(1 - y_test.T, 1 - predictions)) / np.sum(1 - y_test, axis=0))
+    # Converte para índices das classes
+    y_true_classes = np.argmax(y_test, axis=1)
+    y_pred_classes = np.argmax(predictions, axis=1)
+
+    # Calcula a acurácia
+    accuracy = np.mean(y_true_classes == y_pred_classes)
+
+    # Sensibilidade (média do recall por classe)
+    sensitivity = []
+    for c in range(y_test.shape[1]):
+        true_positive = np.sum((y_true_classes == c) & (y_pred_classes == c))
+        actual_positive = np.sum(y_true_classes == c)
+        sensitivity.append(true_positive / actual_positive if actual_positive > 0 else 0)
+    sensitivity = np.mean(sensitivity)
+
+    # Especificidade (considerando o resto das classes)
+    specificity = []
+    for c in range(y_test.shape[1]):
+        true_negative = np.sum((y_true_classes != c) & (y_pred_classes != c))
+        actual_negative = np.sum(y_true_classes != c)
+        specificity.append(true_negative / actual_negative if actual_negative > 0 else 0)
+    specificity = np.mean(specificity)
+
     return accuracy, sensitivity, specificity
+
 
 # Execução
 if __name__ == "__main__":
