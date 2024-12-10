@@ -5,6 +5,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 
+
 # Funções auxiliares
 activation_func = lambda x: np.maximum(0, x)  # ReLU
 activation_derivative = lambda a: np.where(a > 0, 1, 0)
@@ -56,7 +57,7 @@ class Normalizacao:
 # Função para calcular matriz de confusão
 def calculate_confusion_matrix(predictions, y_test, n_classes):
     conf_matrix = np.zeros((n_classes, n_classes), dtype=int)
-    for true_label, predicted_label in zip(y_test, predictions):
+    for true_label, predicted_label in zip(np.argmax(y_test, axis=1), np.argmax(predictions, axis=1)):
         conf_matrix[true_label, predicted_label] += 1
     return conf_matrix
 
@@ -69,14 +70,14 @@ def calculate_accuracy(predictions, y_test):
     :param y_test: Rótulos reais, no formato de índices
     :return: Acurácia
     """
-    if predictions.ndim > 1:
-        predictions = np.argmax(predictions, axis=1)  # Converte one-hot para índices
-    return np.mean(predictions == y_test)
+    predictions_one_hot = predictions if predictions.ndim > 1 else np.eye(y_test.shape[1])[predictions]
+    return np.mean(np.argmax(predictions_one_hot, axis=1) == np.argmax(y_test, axis=1))
 
 
 # Função para calcular métricas
 def calculate_metrics(predictions, y_test, n_classes):
-    conf_matrix = calculate_confusion_matrix(predictions, y_test, n_classes)
+    predictions_one_hot = predictions if predictions.ndim > 1 else np.eye(y_test.shape[1])[predictions]
+    conf_matrix = calculate_confusion_matrix(predictions_one_hot, y_test, n_classes)
     accuracy = np.trace(conf_matrix) / np.sum(conf_matrix)
     sensitivity = []
     specificity = []
@@ -123,7 +124,7 @@ class PerceptronSimples:
     def predict(self, X):
         X_bias = np.hstack([np.ones((X.shape[0], 1)), X])
         u = np.dot(X_bias, self.weights)
-        return np.argmax(u, axis=1)
+        return step_activation(u)
 
 # Classe Adaline
 class Adaline:
@@ -171,7 +172,7 @@ class Adaline:
             self.weights += self.learning_rate * np.dot(X.T, error) / N
             self.bias += self.learning_rate * np.mean(error, axis=0)
 
-              # Critério de parada baseado no erro (se o EQM for menor que epsilon, o treinamento é interrompido)
+            # Critério de parada baseado no erro (se o EQM for menor que epsilon, o treinamento é interrompido)
             if eqm < self.epsilon:
                 print(f"Convergência alcançada na época {epoch + 1}")
                 break
@@ -186,7 +187,7 @@ class Adaline:
         :return: Rótulos previstos para os dados de entrada
         """
         u = np.dot(X, self.weights) + self.bias  # Calcula a previsão
-        return np.argmax(u, axis=1)  # Retorna o índice da classe com maior valor
+        return u  # Retorna o potencial para ativação posterior
 
 
 # Classe MLP
@@ -222,11 +223,9 @@ class MLP:
     def predict(self, X):
         activations = self.forward(X)
         y_pred = activations[-1].T
-        return np.argmax(y_pred, axis=1)
-
+        return y_pred  # Retorna as probabilidades softmax
 
 # Função para exibir a matriz de confusão usando seaborn
-
 def plot_confusion_matrix(conf_matrix, title):
     plt.figure(figsize=(10, 8))
     sns.heatmap(conf_matrix, annot=True, fmt='d', cmap='Blues')
@@ -268,14 +267,19 @@ if __name__ == "__main__":
             modelo.fit(X_train, y_train)
             predictions = modelo.predict(X_test)
 
-            if predictions.ndim == 1:
-                predictions = np.eye(n_classes)[predictions]
+            # Garantir que ambos estejam em formato bidimensional
+            y_test_one_hot = y_test if y_test.ndim > 1 else np.eye(n_classes)[y_test]
+            predictions_one_hot = predictions if predictions.ndim > 1 else np.eye(n_classes)[np.argmax(predictions, axis=1)]
 
-            accuracy = calculate_accuracy(predictions, np.argmax(y_test, axis=1))
-            acuracias.append(accuracy)
+            # Debug prints
+            print(f"Debug - y_test shape: {y_test.shape}, predictions shape: {predictions.shape}")
+            print(f"Debug - y_test_one_hot shape: {y_test_one_hot.shape}, predictions_one_hot shape: {predictions_one_hot.shape}")
 
-            conf_matrix = calculate_confusion_matrix(np.argmax(predictions, axis=1), np.argmax(y_test, axis=1), n_classes)
+            # Calcular a matriz de confusão e acurácia
+            conf_matrix = calculate_confusion_matrix(predictions_one_hot, y_test_one_hot, n_classes)
             conf_matrices.append(conf_matrix)
+            accuracy = calculate_accuracy(predictions_one_hot, y_test_one_hot)
+            acuracias.append(accuracy)
 
         media_acuracia = np.mean(acuracias)
         dp_acuracia = np.std(acuracias)
