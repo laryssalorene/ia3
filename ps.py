@@ -3,6 +3,7 @@ import os
 import cv2
 import pandas as pd
 import matplotlib.pyplot as plt
+import seaborn as sns
 
 # Funções auxiliares
 activation_func = lambda x: np.maximum(0, x)  # ReLU
@@ -223,11 +224,19 @@ class MLP:
         y_pred = activations[-1].T
         return np.argmax(y_pred, axis=1)
 
-# Execução
-# Execução
-if __name__ == "__main__":
-    import matplotlib.pyplot as plt
 
+# Função para exibir a matriz de confusão usando seaborn
+
+def plot_confusion_matrix(conf_matrix, title):
+    plt.figure(figsize=(10, 8))
+    sns.heatmap(conf_matrix, annot=True, fmt='d', cmap='Blues')
+    plt.title(title)
+    plt.xlabel('Predicted')
+    plt.ylabel('True')
+    plt.show()
+
+# Execução principal
+if __name__ == "__main__":
     img_size = 50
     data, labels = LerImagem.obter_dados(img_size)
     data = Normalizacao.normalizar(data)
@@ -248,6 +257,7 @@ if __name__ == "__main__":
         print(f"\nExecutando {nome_modelo}...")
 
         acuracias = []  # Lista para armazenar as acurácias de múltiplas execuções
+        conf_matrices = []  # Lista para armazenar matrizes de confusão correspondentes
 
         # Repetir o experimento para obter estatísticas
         for repeticao in range(5):  # 5 execuções para cálculo das estatísticas
@@ -255,32 +265,23 @@ if __name__ == "__main__":
             X_train, X_test = data[indices[:512]], data[indices[512:]]
             y_train, y_test = labels[indices[:512]], labels[indices[512:]]
 
-            # Ajuste para capturar histórico de EQM se o modelo for Adaline
-            if nome_modelo == "Adaline":
-                modelo.fit(X_train, y_train)
-            else:
-                modelo.fit(X_train, y_train)
-
+            modelo.fit(X_train, y_train)
             predictions = modelo.predict(X_test)
 
-            # Certifique-se de que predictions seja correto
             if predictions.ndim == 1:
                 predictions = np.eye(n_classes)[predictions]
 
-            # Calcula a acurácia
-            # Certifique-se de que y_test e predictions estão em formato de índices
             accuracy = calculate_accuracy(predictions, np.argmax(y_test, axis=1))
-
-
             acuracias.append(accuracy)
 
-        # Cálculo das estatísticas
+            conf_matrix = calculate_confusion_matrix(np.argmax(predictions, axis=1), np.argmax(y_test, axis=1), n_classes)
+            conf_matrices.append(conf_matrix)
+
         media_acuracia = np.mean(acuracias)
         dp_acuracia = np.std(acuracias)
         max_acuracia = np.max(acuracias)
         min_acuracia = np.min(acuracias)
 
-        # Armazenar estatísticas
         estatisticas_acuracia[nome_modelo] = {
             "Média": media_acuracia,
             "Desvio Padrão": dp_acuracia,
@@ -288,9 +289,19 @@ if __name__ == "__main__":
             "Mínimo": min_acuracia
         }
 
-        # Exibir estatísticas
         print(f"\nEstatísticas de Acurácia para {nome_modelo}:")
         print(f" - Média: {media_acuracia:.4f}")
         print(f" - Desvio Padrão: {dp_acuracia:.4f}")
         print(f" - Máximo: {max_acuracia:.4f}")
         print(f" - Mínimo: {min_acuracia:.4f}")
+
+        # Selecionar as matrizes de confusão para o maior e menor caso
+        max_conf_matrix = conf_matrices[acuracias.index(max_acuracia)]
+        min_conf_matrix = conf_matrices[acuracias.index(min_acuracia)]
+
+        # Plotar as matrizes de confusão
+        print(f"\nMatriz de confusão para maior acurácia ({max_acuracia:.4f}):")
+        plot_confusion_matrix(max_conf_matrix, f"Matriz de Confusão - {nome_modelo} (Maior Acurácia)")
+
+        print(f"\nMatriz de confusão para menor acurácia ({min_acuracia:.4f}):")
+        plot_confusion_matrix(min_conf_matrix, f"Matriz de Confusão - {nome_modelo} (Menor Acurácia)")
