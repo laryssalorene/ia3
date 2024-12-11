@@ -134,56 +134,64 @@ class PerceptronSimples:
         return np.eye(self.n_classes)[np.argmax(u, axis=1)]
 
 
-# Adaline ajustado
-import numpy as np
 
 class Adaline:
-    def __init__(self, learning_rate=0.01, max_epochs=1000, epsilon=1e-3):
+    def __init__(self, learning_rate=0.01, max_epochs=1000, epsilon=1e-6):
         self.learning_rate = learning_rate
         self.max_epochs = max_epochs
         self.epsilon = epsilon
-        self.weights = None
-        self.history = []
 
     def fit(self, X, Y):
-        # Normalização e adição do viés
+        # Adiciona o viés (bias) e normaliza os dados
         X = np.hstack((-np.ones((X.shape[0], 1)), X))
         X = (X - np.mean(X, axis=0)) / (np.std(X, axis=0) + 1e-8)
 
-        # Inicializa pesos aleatórios
+        # Inicializa os pesos
         self.weights = np.random.uniform(-0.1, 0.1, (X.shape[1], Y.shape[1]))
 
-        eqm_list = []
+        prev_eqm = np.inf  # Inicializa o erro quadrático médio da época anterior
         for epoch in range(self.max_epochs):
+            # Cálculo das saídas
             outputs = X @ self.weights
             errors = Y - outputs
 
-            # Verifica por problemas numéricos
+            # Verificação de estabilidade
             if not np.all(np.isfinite(errors)):
-                print(f"Erro numérico detectado na época {epoch}. Finalizando treinamento.")
+                print(f"Erro numérico detectado na época {epoch}. Finalizando.")
                 break
 
+            # Atualiza os pesos
             eqm = np.mean(errors**2) / 2
-            eqm_list.append(eqm)
+            grad = np.clip(X.T @ errors / X.shape[0], -1e3, 1e3)  # Limita o gradiente
+            self.weights += self.learning_rate * grad
 
-            # Atualização dos pesos (gradiente por lote)
-            grad = np.clip(X.T @ errors, -1e2, 1e2)
-            self.weights += self.learning_rate * grad / X.shape[0]
-
-            # Critério de convergência
-            if epoch > 0 and abs(eqm_list[-1] - eqm_list[-2]) < self.epsilon:
-                print("Convergência atingida.")
+            # Critério de parada
+            if epoch > 0 and abs(eqm - prev_eqm) < self.epsilon:
+                print(f"Convergência atingida na época {epoch}.")
                 break
 
-  
-
-        
+            prev_eqm = eqm  # Atualiza o erro quadrático médio para a próxima época
 
     def predict(self, X):
-        # Adiciona o viés às amostras de entrada
+        # Adiciona o viés (bias) e normaliza os dados
         X = np.hstack((-np.ones((X.shape[0], 1)), X))
-        # Retorna a saída do modelo Adaline (não binarizada)
-        return X @ self.weights
+        X = (X - np.mean(X, axis=0)) / (np.std(X, axis=0) + 1e-8)
+
+        outputs = X @ self.weights
+        
+        # Garante que a saída tenha pelo menos 2 dimensões (no caso de uma única previsão, transforma em uma array 2D)
+        if outputs.ndim == 1:
+            outputs = outputs[:, np.newaxis]
+        
+        # Gera as previsões no formato one-hot
+        predictions = np.argmax(outputs, axis=1)
+        
+        # Converte para codificação one-hot, se necessário
+        predictions_one_hot = np.eye(outputs.shape[1])[predictions] if outputs.shape[1] > 1 else predictions
+        
+        return predictions_one_hot
+
+
 
 
 
