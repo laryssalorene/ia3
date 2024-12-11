@@ -146,39 +146,37 @@ class Adaline:
         self.history = []
 
     def fit(self, X, Y):
-        # Adicionando o viés às amostras de entrada
-        n_samples, n_features = X.shape
-        X = np.hstack((-np.ones((n_samples, 1)), X))  # Adiciona o bias como primeira coluna
+        # Normalização e adição do viés
+        X = np.hstack((-np.ones((X.shape[0], 1)), X))
+        X = (X - np.mean(X, axis=0)) / (np.std(X, axis=0) + 1e-8)
 
-        # Normalizar os dados
-        X = (X - np.mean(X, axis=0)) / np.std(X, axis=0)
-
-        # Inicialização dos pesos
+        # Inicializa pesos aleatórios
         self.weights = np.random.uniform(-0.1, 0.1, (X.shape[1], Y.shape[1]))
 
-        epochs = 0
-        prev_eqm = np.inf
-
-        while epochs < self.max_epochs:
+        eqm_list = []
+        for epoch in range(self.max_epochs):
             outputs = X @ self.weights
             errors = Y - outputs
 
-            # Evitar overflow no cálculo dos erros
-            errors = np.clip(errors, -1e10, 1e10)
-
-            eqm = np.mean(errors**2) / 2
-
-            # Critério de parada ajustado
-            if not np.isfinite(eqm) or abs(prev_eqm - eqm) < self.epsilon:
+            # Verifica por problemas numéricos
+            if not np.all(np.isfinite(errors)):
+                print(f"Erro numérico detectado na época {epoch}. Finalizando treinamento.")
                 break
 
-            # Atualização dos pesos
-            grad = np.clip(X.T @ errors, -1e10, 1e10)
-            self.weights += self.learning_rate * grad / n_samples
+            eqm = np.mean(errors**2) / 2
+            eqm_list.append(eqm)
 
-            prev_eqm = eqm
-            self.history.append(eqm)
-            epochs += 1
+            # Atualização dos pesos (gradiente por lote)
+            grad = np.clip(X.T @ errors, -1e2, 1e2)
+            self.weights += self.learning_rate * grad / X.shape[0]
+
+            # Critério de convergência
+            if epoch > 0 and abs(eqm_list[-1] - eqm_list[-2]) < self.epsilon:
+                print("Convergência atingida.")
+                break
+
+  
+
         
 
     def predict(self, X):
