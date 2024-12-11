@@ -201,33 +201,55 @@ class MLP:
         self.learning_rate = learning_rate
         self.max_epochs = max_epochs
         self.layers = [input_size] + hidden_layers + [output_size]
-        self.weights = [np.random.randn(self.layers[i + 1], self.layers[i] + 1) for i in range(len(self.layers) - 1)]
+        
+        # Inicialização dos pesos (usando a inicialização de He para ReLU)
+        self.weights = [np.random.randn(self.layers[i + 1], self.layers[i] + 1) * np.sqrt(2. / self.layers[i])
+                        for i in range(len(self.layers) - 1)]  # He initialization
 
     def forward(self, X):
         activations = [X.T]
         for w in self.weights[:-1]:
-            a_with_bias = np.vstack([np.ones((1, activations[-1].shape[1])), activations[-1]])
+            a_with_bias = np.vstack([np.ones((1, activations[-1].shape[1])), activations[-1]])  # Adiciona o viés
             z = np.dot(w, a_with_bias)
-            activations.append(activation_func(z))
-        a_with_bias = np.vstack([np.ones((1, activations[-1].shape[1])), activations[-1]])
+            activations.append(activation_func(z))  # Aplica ReLU
+
+        # Camada de saída com softmax
+        a_with_bias = np.vstack([np.ones((1, activations[-1].shape[1])), activations[-1]])  # Adiciona o viés
         z = np.dot(self.weights[-1], a_with_bias)
-        activations.append(softmax(z))
+        activations.append(softmax(z))  # Aplica softmax na saída
         return activations
+
+    def backward(self, X, y, activations):
+        deltas = []
+        y_pred = activations[-1]  # Saída da rede (última camada)
+
+        # Calculando erro da camada de saída usando Cross-Entropy com Softmax
+        delta_output = y_pred - y.T
+        deltas.append(delta_output)
+
+        # Backpropagation para camadas ocultas
+        for l in range(len(self.weights) - 2, -1, -1):  # Itera de trás para frente (camadas ocultas)
+            delta_hidden = np.dot(self.weights[l + 1][:, 1:].T, deltas[0]) * activation_derivative(activations[l + 1])
+            deltas.insert(0, delta_hidden)
+
+        return deltas
 
     def fit(self, X, y):
         for epoch in range(self.max_epochs):
-            activations = self.forward(X)
-            y_pred = activations[-1]
-            deltas = [y_pred - y.T]
-            for l in range(len(self.weights) - 2, -1, -1):
-                deltas.insert(0, np.dot(self.weights[l + 1][:, 1:].T, deltas[0]) * activation_derivative(activations[l + 1]))
-            for l in range(len(self.weights)):
-                a_with_bias = np.vstack([np.ones((1, activations[l].shape[1])), activations[l]])
+            activations = self.forward(X)  # Propagação para frente
+
+            # Backpropagation para calcular gradientes
+            deltas = self.backward(X, y, activations)
+
+            # Atualização dos pesos usando o gradiente
+            for l in range(len(self.weights)):  # Para cada camada, atualiza os pesos
+                a_with_bias = np.vstack([np.ones((1, activations[l].shape[1])), activations[l]])  # Adiciona o viés
                 self.weights[l] -= self.learning_rate * np.dot(deltas[l], a_with_bias.T) / X.shape[0]
 
     def predict(self, X):
         activations = self.forward(X)
-        return activations[-1].T
+        return activations[-1].T  # Retorna a predição da camada de saída
+
 
 # Função para exibir a matriz de confusão usando seaborn
 def plot_confusion_matrix(conf_matrix, title):
