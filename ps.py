@@ -135,25 +135,32 @@ class PerceptronSimples:
 
 
 
+import numpy as np
+
 class Adaline:
     def __init__(self, learning_rate=0.01, max_epochs=1000, epsilon=1e-6):
         self.learning_rate = learning_rate
         self.max_epochs = max_epochs
         self.epsilon = epsilon
 
-    def fit(self, X, Y):
+    def fit(self, X, y):
         # Adiciona o viés (bias) e normaliza os dados
-        X = np.hstack((-np.ones((X.shape[0], 1)), X))
-        X = (X - np.mean(X, axis=0)) / (np.std(X, axis=0) + 1e-8)
+        X = np.hstack((-np.ones((X.shape[0], 1)), X))  # Adiciona coluna de viés
+        X = (X - np.mean(X, axis=0)) / (np.std(X, axis=0) + 1e-8)  # Normalização
+
+        # Converte y para a forma one-hot caso seja unidimensional
+        if y.ndim == 1:
+            num_classes = np.max(y) + 1
+            y = np.eye(num_classes)[y]
 
         # Inicializa os pesos
-        self.weights = np.random.uniform(-0.1, 0.1, (X.shape[1], Y.shape[1]))
+        self.weights = np.random.uniform(-0.1, 0.1, (X.shape[1], y.shape[1]))
 
         prev_eqm = np.inf  # Inicializa o erro quadrático médio da época anterior
         for epoch in range(self.max_epochs):
             # Cálculo das saídas
             outputs = X @ self.weights
-            errors = Y - outputs
+            errors = y - outputs
 
             # Verificação de estabilidade
             if not np.all(np.isfinite(errors)):
@@ -174,8 +181,8 @@ class Adaline:
 
     def predict(self, X):
         # Adiciona o viés (bias) e normaliza os dados
-        X = np.hstack((-np.ones((X.shape[0], 1)), X))
-        X = (X - np.mean(X, axis=0)) / (np.std(X, axis=0) + 1e-8)
+        X = np.hstack((-np.ones((X.shape[0], 1)), X))  # Adiciona coluna de viés
+        X = (X - np.mean(X, axis=0)) / (np.std(X, axis=0) + 1e-8)  # Normalização
 
         outputs = X @ self.weights
         
@@ -183,13 +190,19 @@ class Adaline:
         if outputs.ndim == 1:
             outputs = outputs[:, np.newaxis]
         
-        # Gera as previsões no formato one-hot
+        # Gera as previsões no formato one-hot (se necessário)
         predictions = np.argmax(outputs, axis=1)
-        
-        # Converte para codificação one-hot, se necessário
-        predictions_one_hot = np.eye(outputs.shape[1])[predictions] if outputs.shape[1] > 1 else predictions
-        
+
+        # Caso o número de classes seja 1, retorna a predição de forma unidimensional
+        if outputs.shape[1] == 1:
+            return predictions.reshape(-1, 1)  # Retorna como vetor unidimensional
+
+        # Caso contrário, converte a predição para one-hot
+        predictions_one_hot = np.eye(outputs.shape[1])[predictions]
         return predictions_one_hot
+
+
+
 
 
 
