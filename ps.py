@@ -76,22 +76,24 @@ def calculate_accuracy(predictions, y_test):
 def calculate_metrics(predictions, y_test, n_classes):
     predictions_one_hot = predictions if predictions.ndim > 1 else np.eye(y_test.shape[1])[predictions]
     conf_matrix = calculate_confusion_matrix(predictions_one_hot, y_test, n_classes)
+
     accuracy = np.trace(conf_matrix) / np.sum(conf_matrix)
+
     sensitivity = []
     specificity = []
-
     for i in range(n_classes):
         tp = conf_matrix[i, i]
         fn = np.sum(conf_matrix[i, :]) - tp
         fp = np.sum(conf_matrix[:, i]) - tp
         tn = np.sum(conf_matrix) - (tp + fn + fp)
+
         sensitivity.append(tp / (tp + fn) if (tp + fn) > 0 else 0)
         specificity.append(tn / (tn + fp) if (tn + fp) > 0 else 0)
 
     avg_sensitivity = np.mean(sensitivity)
     avg_specificity = np.mean(specificity)
 
-    return accuracy, avg_sensitivity, avg_specificity, conf_matrix
+    return accuracy, avg_sensitivity, avg_specificity, sensitivity, specificity, conf_matrix
 
 # Perceptron Simples
 class PerceptronSimples:
@@ -102,32 +104,34 @@ class PerceptronSimples:
         self.weights = None
 
     def fit(self, X, y):
-        X_bias = np.hstack([np.ones((X.shape[0], 1)), X])  # Adiciona bias
-        self.weights = np.zeros((X_bias.shape[1], self.n_classes))  # Inicializa pesos com 0
+        N, M = X.shape
+        X_bias = np.hstack([np.ones((N, 1)), X])  # Adiciona bias
+        self.weights = np.random.uniform(-0.5, 0.5, (M + 1, self.n_classes))  # Inicializa pesos aleatoriamente
 
         for epoch in range(self.max_epochs):
-            erro_existe = False
+            erro = False
 
-            for i in range(X.shape[0]):
-                xi = X_bias[i]
-                yi = y[i]
+            for i in range(N):
+                xi = X_bias[i].reshape(-1, 1)
+                target = y[i]
 
-                u = np.dot(xi, self.weights)
+                u = np.dot(self.weights.T, xi).flatten()
                 y_pred = step_activation(u)
 
                 for j in range(self.n_classes):
-                    if y_pred[j] != yi[j]:
-                        erro_existe = True
-                        self.weights[:, j] += self.learning_rate * (yi[j] - y_pred[j]) * xi
+                    if y_pred[j] != target[j]:
+                        erro = True
+                        self.weights[:, j] += self.learning_rate * (target[j] - y_pred[j]) * xi.flatten()
 
-            if not erro_existe:
+            if not erro:
                 print(f"Convergência alcançada na época {epoch + 1}")
                 break
 
     def predict(self, X):
-        X_bias = np.hstack([np.ones((X.shape[0], 1)), X])
+        N = X.shape[0]
+        X_bias = np.hstack([np.ones((N, 1)), X])
         u = np.dot(X_bias, self.weights)
-        return step_activation(u)
+        return np.eye(self.n_classes)[np.argmax(u, axis=1)]
 
 # Adaline
 class Adaline:
@@ -166,7 +170,7 @@ class Adaline:
 
     def predict(self, X):
         u = np.dot(X, self.weights) + self.bias
-        return u
+        return np.eye(self.num_classes)[np.argmax(u, axis=1)]
 
 # MLP
 class MLP:
@@ -179,10 +183,10 @@ class MLP:
     def forward(self, X):
         activations = [X.T]
         for w in self.weights[:-1]:
-            a_with_bias = np.vstack([np.ones((1, activations[-1].shape[1])), activations[-1]] )
+            a_with_bias = np.vstack([np.ones((1, activations[-1].shape[1])), activations[-1]])
             z = np.dot(w, a_with_bias)
             activations.append(activation_func(z))
-        a_with_bias = np.vstack([np.ones((1, activations[-1].shape[1])), activations[-1]] )
+        a_with_bias = np.vstack([np.ones((1, activations[-1].shape[1])), activations[-1]])
         z = np.dot(self.weights[-1], a_with_bias)
         activations.append(softmax(z))
         return activations
@@ -195,7 +199,7 @@ class MLP:
             for l in range(len(self.weights) - 2, -1, -1):
                 deltas.insert(0, np.dot(self.weights[l + 1][:, 1:].T, deltas[0]) * activation_derivative(activations[l + 1]))
             for l in range(len(self.weights)):
-                a_with_bias = np.vstack([np.ones((1, activations[l].shape[1])), activations[l]] )
+                a_with_bias = np.vstack([np.ones((1, activations[l].shape[1])), activations[l]])
                 self.weights[l] -= self.learning_rate * np.dot(deltas[l], a_with_bias.T) / X.shape[0]
 
     def predict(self, X):
