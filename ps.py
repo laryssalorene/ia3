@@ -5,17 +5,23 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-
 # Funções auxiliares
-activation_func = lambda x: np.maximum(0, x)  # ReLU
-activation_derivative = lambda a: np.where(a > 0, 1, 0)
+def activation_func(x):
+    """Função de ativação ReLU."""
+    return np.maximum(0, x)
+
+def activation_derivative(a):
+    """Derivada da função ReLU."""
+    return np.where(a > 0, 1, 0)
 
 def softmax(z):
+    """Função Softmax."""
     exp_z = np.exp(z - np.max(z, axis=0, keepdims=True))
     return exp_z / np.sum(exp_z, axis=0, keepdims=True)
 
 def step_activation(u):
-    return np.where(u >= 0, 1, 0)
+    """Função de ativação degrau."""
+    return np.where(u >= 0, 1, -1)  # Retorna 1 para u >= 0 e -1 para u < 0
 
 # Classe para leitura de imagens
 class LerImagem:
@@ -61,18 +67,10 @@ def calculate_confusion_matrix(predictions, y_test, n_classes):
         conf_matrix[true_label, predicted_label] += 1
     return conf_matrix
 
-
 def calculate_accuracy(predictions, y_test):
-    """
-    Calcula a acurácia entre as predições e os rótulos reais.
-
-    :param predictions: Predições do modelo, no formato one-hot ou índices
-    :param y_test: Rótulos reais, no formato de índices
-    :return: Acurácia
-    """
+    """Calcula a acurácia entre as predições e os rótulos reais."""
     predictions_one_hot = predictions if predictions.ndim > 1 else np.eye(y_test.shape[1])[predictions]
     return np.mean(np.argmax(predictions_one_hot, axis=1) == np.argmax(y_test, axis=1))
-
 
 # Função para calcular métricas
 def calculate_metrics(predictions, y_test, n_classes):
@@ -95,30 +93,35 @@ def calculate_metrics(predictions, y_test, n_classes):
 
     return accuracy, avg_sensitivity, avg_specificity, conf_matrix
 
-# Classe Perceptron Simples
+# Perceptron Simples
 class PerceptronSimples:
-    def __init__(self, learning_rate=0.01, max_epochs=20, n_classes=20):
+    def __init__(self, learning_rate=0.01, max_epochs=50, n_classes=20):
         self.learning_rate = learning_rate
         self.max_epochs = max_epochs
         self.n_classes = n_classes
         self.weights = None
 
     def fit(self, X, y):
-        X_bias = np.hstack([np.ones((X.shape[0], 1)), X])
-        self.weights = np.random.randn(X_bias.shape[1], self.n_classes) * 0.01
+        X_bias = np.hstack([np.ones((X.shape[0], 1)), X])  # Adiciona bias
+        self.weights = np.zeros((X_bias.shape[1], self.n_classes))  # Inicializa pesos com 0
 
         for epoch in range(self.max_epochs):
-            total_error = 0
+            erro_existe = False
+
             for i in range(X.shape[0]):
                 xi = X_bias[i]
                 yi = y[i]
+
                 u = np.dot(xi, self.weights)
                 y_pred = step_activation(u)
-                error = yi - y_pred
-                total_error += np.sum(np.abs(error))
-                self.weights += self.learning_rate * np.outer(xi, error)
 
-            if total_error / X.shape[0] < 1e-3:
+                for j in range(self.n_classes):
+                    if y_pred[j] != yi[j]:
+                        erro_existe = True
+                        self.weights[:, j] += self.learning_rate * (yi[j] - y_pred[j]) * xi
+
+            if not erro_existe:
+                print(f"Convergência alcançada na época {epoch + 1}")
                 break
 
     def predict(self, X):
@@ -126,71 +129,46 @@ class PerceptronSimples:
         u = np.dot(X_bias, self.weights)
         return step_activation(u)
 
-# Classe Adaline
+# Adaline
 class Adaline:
-    def __init__(self, learning_rate=0.001, max_epochs=1000, epsilon=1e-3):  
-        """
-        Construtor da classe Adaline.
-
-        :param learning_rate: Taxa de aprendizado
-        :param max_epochs: Número máximo de épocas para treinamento
-        :param epsilon: Critério de parada baseado no erro quadrático médio (EQM)
-        """
+    def __init__(self, learning_rate=0.001, max_epochs=1000, epsilon=1e-3):
         self.learning_rate = learning_rate
         self.max_epochs = max_epochs
-        self.epsilon = epsilon  # Agora epsilon é um parâmetro configurável
+        self.epsilon = epsilon
         self.weights = None
         self.bias = None
 
     def fit(self, X, y):
-        """
-        Treina o modelo Adaline.
-
-        :param X: Dados de entrada (features)
-        :param y: Rótulos de saída (target)
-        :return: Histórico do erro quadrático médio (EQM) para cada época
-        """
-        N, M = X.shape  # N = número de amostras, M = número de características
-        self.num_classes = y.shape[1]  # Número de classes
-        self.weights = np.random.randn(M, self.num_classes) * 0.001  # Inicializa pesos
-        self.bias = np.zeros(self.num_classes)  # Inicializa o bias
-        eqm_history = []  # Para armazenar o EQM de cada época
+        N, M = X.shape
+        self.num_classes = y.shape[1]
+        self.weights = np.random.randn(M, self.num_classes) * 0.001
+        self.bias = np.zeros(self.num_classes)
+        eqm_history = []
 
         for epoch in range(self.max_epochs):
-            # Cálculo do potencial u e previsão
             u = np.dot(X, self.weights) + self.bias
-            u = np.clip(u, -1e3, 1e3)  # Evita overflow
-            y_hat = u  # Ativação linear
+            u = np.clip(u, -1e3, 1e3)
+            y_hat = u
 
-            # Erro e EQM
-            error = y - y_hat  # Erro entre o valor real e a previsão
-            error = np.clip(error, -1e3, 1e3)  # Limitar erro para evitar overflow
-            eqm = np.mean(error**2)  # Calcula o erro quadrático médio
-            eqm_history.append(eqm)  # Armazena o EQM para essa época
+            error = y - y_hat
+            error = np.clip(error, -1e3, 1e3)
+            eqm = np.mean(error**2)
+            eqm_history.append(eqm)
 
-            # Atualiza pesos e bias
             self.weights += self.learning_rate * np.dot(X.T, error) / N
             self.bias += self.learning_rate * np.mean(error, axis=0)
 
-            # Critério de parada baseado no erro (se o EQM for menor que epsilon, o treinamento é interrompido)
             if eqm < self.epsilon:
                 print(f"Convergência alcançada na época {epoch + 1}")
                 break
 
-        return eqm_history  # Retorna o histórico do EQM
+        return eqm_history
 
     def predict(self, X):
-        """
-        Faz previsões para os dados de entrada.
+        u = np.dot(X, self.weights) + self.bias
+        return u
 
-        :param X: Dados de entrada para prever as classes
-        :return: Rótulos previstos para os dados de entrada
-        """
-        u = np.dot(X, self.weights) + self.bias  # Calcula a previsão
-        return u  # Retorna o potencial para ativação posterior
-
-
-# Classe MLP
+# MLP
 class MLP:
     def __init__(self, input_size, hidden_layers, output_size, learning_rate=0.01, max_epochs=1000):
         self.learning_rate = learning_rate
@@ -201,10 +179,10 @@ class MLP:
     def forward(self, X):
         activations = [X.T]
         for w in self.weights[:-1]:
-            a_with_bias = np.vstack([np.ones((1, activations[-1].shape[1])), activations[-1]])
+            a_with_bias = np.vstack([np.ones((1, activations[-1].shape[1])), activations[-1]] )
             z = np.dot(w, a_with_bias)
             activations.append(activation_func(z))
-        a_with_bias = np.vstack([np.ones((1, activations[-1].shape[1])), activations[-1]])
+        a_with_bias = np.vstack([np.ones((1, activations[-1].shape[1])), activations[-1]] )
         z = np.dot(self.weights[-1], a_with_bias)
         activations.append(softmax(z))
         return activations
@@ -217,13 +195,12 @@ class MLP:
             for l in range(len(self.weights) - 2, -1, -1):
                 deltas.insert(0, np.dot(self.weights[l + 1][:, 1:].T, deltas[0]) * activation_derivative(activations[l + 1]))
             for l in range(len(self.weights)):
-                a_with_bias = np.vstack([np.ones((1, activations[l].shape[1])), activations[l]])
+                a_with_bias = np.vstack([np.ones((1, activations[l].shape[1])), activations[l]] )
                 self.weights[l] -= self.learning_rate * np.dot(deltas[l], a_with_bias.T) / X.shape[0]
 
     def predict(self, X):
         activations = self.forward(X)
-        y_pred = activations[-1].T
-        return y_pred  # Retorna as probabilidades softmax
+        return activations[-1].T
 
 # Função para exibir a matriz de confusão usando seaborn
 def plot_confusion_matrix(conf_matrix, title):
@@ -249,17 +226,15 @@ if __name__ == "__main__":
         "MLP": MLP(input_size=n_features, hidden_layers=[128], output_size=n_classes, learning_rate=0.01, max_epochs=10)
     }
 
-    # Dicionário para armazenar as acurácias de cada modelo
     estatisticas_acuracia = {}
 
     for nome_modelo, modelo in modelos.items():
         print(f"\nExecutando {nome_modelo}...")
 
-        acuracias = []  # Lista para armazenar as acurácias de múltiplas execuções
-        conf_matrices = []  # Lista para armazenar matrizes de confusão correspondentes
+        acuracias = []
+        conf_matrices = []
 
-        # Repetir o experimento para obter estatísticas
-        for repeticao in range(5):  # 5 execuções para cálculo das estatísticas
+        for repeticao in range(5):
             indices = np.random.permutation(n_samples)
             X_train, X_test = data[indices[:512]], data[indices[512:]]
             y_train, y_test = labels[indices[:512]], labels[indices[512:]]
@@ -267,15 +242,9 @@ if __name__ == "__main__":
             modelo.fit(X_train, y_train)
             predictions = modelo.predict(X_test)
 
-            # Garantir que ambos estejam em formato bidimensional
             y_test_one_hot = y_test if y_test.ndim > 1 else np.eye(n_classes)[y_test]
             predictions_one_hot = predictions if predictions.ndim > 1 else np.eye(n_classes)[np.argmax(predictions, axis=1)]
 
-            # Debug prints
-            print(f"Debug - y_test shape: {y_test.shape}, predictions shape: {predictions.shape}")
-            print(f"Debug - y_test_one_hot shape: {y_test_one_hot.shape}, predictions_one_hot shape: {predictions_one_hot.shape}")
-
-            # Calcular a matriz de confusão e acurácia
             conf_matrix = calculate_confusion_matrix(predictions_one_hot, y_test_one_hot, n_classes)
             conf_matrices.append(conf_matrix)
             accuracy = calculate_accuracy(predictions_one_hot, y_test_one_hot)
@@ -299,13 +268,17 @@ if __name__ == "__main__":
         print(f" - Máximo: {max_acuracia:.4f}")
         print(f" - Mínimo: {min_acuracia:.4f}")
 
-        # Selecionar as matrizes de confusão para o maior e menor caso
         max_conf_matrix = conf_matrices[acuracias.index(max_acuracia)]
         min_conf_matrix = conf_matrices[acuracias.index(min_acuracia)]
 
-        # Plotar as matrizes de confusão
         print(f"\nMatriz de confusão para maior acurácia ({max_acuracia:.4f}):")
-        plot_confusion_matrix(max_conf_matrix, f"Matriz de Confusão - {nome_modelo} (Maior Acurácia)")
+        plot_confusion_matrix(max_conf_matrix, f"{nome_modelo} - Maior Acurácia")
 
         print(f"\nMatriz de confusão para menor acurácia ({min_acuracia:.4f}):")
-        plot_confusion_matrix(min_conf_matrix, f"Matriz de Confusão - {nome_modelo} (Menor Acurácia)")
+        plot_confusion_matrix(min_conf_matrix, f"{nome_modelo} - Menor Acurácia")
+
+    print("\nEstatísticas de Acurácia para todos os Modelos:")
+    for nome_modelo, stats in estatisticas_acuracia.items():
+        print(f"\n{nome_modelo}:")
+        for key, value in stats.items():
+            print(f"  {key}: {value:.4f}")
