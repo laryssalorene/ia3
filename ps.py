@@ -135,73 +135,57 @@ class PerceptronSimples:
 
 
 # Adaline ajustado
+import numpy as np
+
 class Adaline:
-    def __init__(self, learning_rate=0.01, max_epochs=1000, epsilon=1e-5):
-        """Inicializa os parâmetros do Adaline."""
+    def __init__(self, learning_rate=0.01, max_epochs=1000, epsilon=1e-3):
         self.learning_rate = learning_rate
         self.max_epochs = max_epochs
         self.epsilon = epsilon
         self.weights = None
+        self.history = []
 
-    def fit(self, X, y):
-        """Treina o modelo Adaline usando os dados de treinamento."""
-        # Normalização dos dados de entrada
-        X = (X - np.mean(X, axis=0)) / (np.std(X, axis=0) + 1e-8)
+    def fit(self, X, Y):
+        # Adicionando o viés às amostras de entrada
+        n_samples, n_features = X.shape
+        X = np.hstack((-np.ones((n_samples, 1)), X))  # Adiciona o bias como primeira coluna
 
-        N, M = X.shape  # Número de amostras e características
-        K = y.shape[1]  # Número de classes
-
-        # Adicionar o termo de viés (-1)
-        X_bias = np.hstack([-np.ones((N, 1)), X])
+        # Normalizar os dados
+        X = (X - np.mean(X, axis=0)) / np.std(X, axis=0)
 
         # Inicialização dos pesos
-        self.weights = np.random.uniform(-0.1, 0.1, (M + 1, K))
+        self.weights = np.random.uniform(-0.1, 0.1, (X.shape[1], Y.shape[1]))
 
-        # Histórico do EQM
-        eqm_history = []
+        epochs = 0
+        prev_eqm = np.inf
 
-        for epoch in range(self.max_epochs):
-            # Inicializa o erro quadrático médio
-            eqm = 0
+        while epochs < self.max_epochs:
+            outputs = X @ self.weights
+            errors = Y - outputs
 
-            # Calcula a saída e o erro para todas as amostras
-            u = np.dot(X_bias, self.weights)  # Saída linear
-            error = y - u  # Erro
+            # Evitar overflow no cálculo dos erros
+            errors = np.clip(errors, -1e10, 1e10)
 
-            # Acumula o erro quadrático médio
-            eqm += np.mean(np.sum(error**2, axis=1)) / (2 * N)
+            eqm = np.mean(errors**2) / 2
 
-            # Atualiza os pesos usando a regra de aprendizado do Adaline
-            gradient = (self.learning_rate / N) * np.dot(X_bias.T, error)
-            gradient = np.clip(gradient, -1, 1)  # Evitar explosões de gradiente
-            self.weights += gradient
-
-            # Salva o EQM no histórico
-            eqm_history.append(eqm)
-
-            # Verificar critério de convergência
-            if eqm < self.epsilon:
-                print(f"Convergência alcançada na época {epoch + 1}")
+            # Critério de parada ajustado
+            if not np.isfinite(eqm) or abs(prev_eqm - eqm) < self.epsilon:
                 break
 
-            # Evitar instabilidades
-            if np.isnan(eqm) or np.isinf(eqm):
-                print("Erro quadrático médio instável, interrompendo o treinamento.")
-                break
+            # Atualização dos pesos
+            grad = np.clip(X.T @ errors, -1e10, 1e10)
+            self.weights += self.learning_rate * grad / n_samples
 
-        return eqm_history
+            prev_eqm = eqm
+            self.history.append(eqm)
+            epochs += 1
+        
 
     def predict(self, X):
-        """Realiza previsões nos dados de entrada."""
-        # Normalização dos dados de entrada
-        X = (X - np.mean(X, axis=0)) / (np.std(X, axis=0) + 1e-8)
-
-        N = X.shape[0]
-        X_bias = np.hstack([-np.ones((N, 1)), X])  # Adiciona o termo de viés (-1)
-        u = np.dot(X_bias, self.weights)  # Saídas lineares
-
-        # Aplicar a função de ativação (sinal) e retornar as classes
-        return np.where(u >= 0, 1, -1)
+        # Adiciona o viés às amostras de entrada
+        X = np.hstack((-np.ones((X.shape[0], 1)), X))
+        # Retorna a saída do modelo Adaline (não binarizada)
+        return X @ self.weights
 
 
 
